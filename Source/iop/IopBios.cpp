@@ -265,6 +265,7 @@ void CIopBios::Reset(uint32 ramSize, const Iop::SifManPtr& sifMan)
 		m_powerOff = std::make_shared<Iop::CPowerOff>(*m_sifMan);
 		RegisterModule(m_powerOff);
 	}
+	m_usbd.reset();
 	{
 		m_usbd = std::make_shared<Iop::CUsbd>(*this, m_ram);
 		RegisterModule(m_usbd);

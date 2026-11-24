@@ -5,6 +5,7 @@
 #include "string_format.h"
 #include "lexical_cast_ex.h"
 #include "UsbBuzzerDevice.h"
+#include "UsbEthernetDevice.h"
 #include "states/RegisterStateCollectionFile.h"
 
 using namespace Iop;
@@ -24,6 +25,7 @@ CUsbd::CUsbd(CIopBios& bios, uint8* ram)
     , m_ram(ram)
 {
 	RegisterDevice(std::make_unique<CBuzzerUsbDevice>(bios, ram));
+	RegisterDevice(std::make_unique<CEthernetUsbDevice>(bios, ram));
 }
 
 std::string CUsbd::GetId() const
@@ -58,13 +60,23 @@ void CUsbd::Invoke(CMIPS& context, unsigned int functionId)
 		context.m_State.nGPR[CMIPS::V0].nD0 = RegisterLld(
 		    context.m_State.nGPR[CMIPS::A0].nV0);
 		break;
+	case 5:
+		// UnregisterLld
+		context.m_State.nGPR[CMIPS::V0].nD0 = 0;
+		break;
 	case 6:
 		context.m_State.nGPR[CMIPS::V0].nD0 = ScanStaticDescriptor(
 		    context.m_State.nGPR[CMIPS::A0].nV0,
 		    context.m_State.nGPR[CMIPS::A1].nV0,
 		    context.m_State.nGPR[CMIPS::A2].nV0);
 		break;
+	case 7:
+		// SetDevicePrivateData
+		context.m_State.nGPR[CMIPS::V0].nD0 = 0;
+		break;
 	case 9:
+	case 12:
+		// OpenPipe / OpenPipeAligned
 		context.m_State.nGPR[CMIPS::V0].nD0 = OpenPipe(
 		    context.m_State.nGPR[CMIPS::A0].nV0,
 		    context.m_State.nGPR[CMIPS::A1].nV0);
@@ -144,14 +156,28 @@ int32 CUsbd::RegisterLld(uint32 lldOpsPtr)
 
 	auto lldOps = reinterpret_cast<const LLDOPS*>(m_ram + lldOpsPtr);
 	const char* name = reinterpret_cast<const char*>(m_ram + lldOps->namePtr);
+	CLog::GetInstance().Print(LOG_NAME, "RegisterLld name: '%s', probe: 0x%08X, connect: 0x%08X, disconnect: 0x%08X, gp: 0x%08X\r\n",
+	                          name, lldOps->probeFctPtr, lldOps->connectFctPtr, lldOps->disconnectFctPtr, lldOps->gp);
 	for(const auto& devicePair : m_devices)
 	{
 		auto& device = devicePair.second;
-		if(!strcmp(name, device->GetLldName()))
+		bool isMatch = !strcmp(name, device->GetLldName());
+		if(!isMatch && device->GetId() == CEthernetUsbDevice::DEVICE_ID && strcmp(name, "buzzer") != 0)
+		{
+			isMatch = true;
+		}
+		if(isMatch)
 		{
 			device->OnLldRegistered();
 			m_activeDeviceIds.push_back(device->GetId());
-			m_bios.TriggerCallback(lldOps->connectFctPtr, device->GetId());
+			if(lldOps->probeFctPtr != 0)
+			{
+				m_bios.TriggerCallback(lldOps->probeFctPtr, device->GetId());
+			}
+			if(lldOps->connectFctPtr != 0)
+			{
+				m_bios.TriggerCallback(lldOps->connectFctPtr, device->GetId());
+			}
 		}
 	}
 	return 0;

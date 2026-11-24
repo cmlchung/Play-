@@ -435,6 +435,8 @@ set(COMMON_SRC_FILES
 	iop/UsbDevice.h
 	iop/UsbBuzzerDevice.cpp
 	iop/UsbBuzzerDevice.h
+	iop/UsbEthernetDevice.cpp
+	iop/UsbEthernetDevice.h
 	ISO9660/BlockProvider.h
 	ISO9660/DirectoryRecord.cpp
 	ISO9660/DirectoryRecord.h
