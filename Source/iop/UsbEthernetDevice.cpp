@@ -3,16 +3,22 @@
 #ifdef interface
 #undef interface
 #endif
+#include "AppConfig.h"
 #include "IopBios.h"
 #include "Log.h"
+#include "PS2VM_Preferences.h"
 #include "Ps2Const.h"
 #include "states/RegisterState.h"
 #include <algorithm>
 #include <cassert>
 #include <cstring>
+#include <functional>
+#include <sstream>
 
 #ifndef _WIN32
 #include <fcntl.h>
+#include <netdb.h>
+#include <unistd.h>
 #endif
 
 using namespace Iop;
@@ -82,7 +88,14 @@ CEthernetUsbDevice::CEthernetUsbDevice(CIopBios& bios, uint8* ram)
 	InitSocket();
 
 	uint8 nodeIndex = static_cast<uint8>(m_localPort >= m_basePort ? (m_localPort - m_basePort) : 0);
-	uint8 mac[6] = {0x00, 0x04, 0xA3, 0x24, 0x60, static_cast<uint8>(0x10 + nodeIndex)};
+	uint8 hostByte = 0x60;
+	char hostName[256] = {};
+	if(gethostname(hostName, sizeof(hostName) - 1) == 0 && hostName[0] != '\0')
+	{
+		size_t hostHash = std::hash<std::string>{}(hostName);
+		hostByte = static_cast<uint8>(hostHash & 0xFF);
+	}
+	uint8 mac[6] = {0x00, 0x04, 0xA3, 0x24, hostByte, static_cast<uint8>(0x10 + nodeIndex)};
 
 	memcpy(&m_regs[REG_ETH_ID0], mac, sizeof(mac));
 	m_regs[REG_ETH_CTRL1] = 0x08;
@@ -117,12 +130,84 @@ void CEthernetUsbDevice::InitSocket()
 	WSAStartup(MAKEWORD(2, 2), &wsaData);
 #endif
 
+	m_targets.clear();
+	std::string targetSetting = CAppConfig::GetInstance().GetPreferenceString(PREF_PS2_ARCADE_ETHERNET_TARGET);
+	if(!targetSetting.empty())
+	{
+		std::stringstream ss(targetSetting);
+		std::string token;
+		while(std::getline(ss, token, ','))
+		{
+			size_t first = token.find_first_not_of(" \t\r\n");
+			if(first == std::string::npos)
+			{
+				continue;
+			}
+			size_t last = token.find_last_not_of(" \t\r\n");
+			std::string entry = token.substr(first, last - first + 1);
+
+			std::string host = entry;
+			uint16 parsedTargetPort = 0;
+			auto colonPos = entry.find(':');
+			if(colonPos != std::string::npos)
+			{
+				host = entry.substr(0, colonPos);
+				std::string portStr = entry.substr(colonPos + 1);
+				if(!portStr.empty())
+				{
+					try
+					{
+						int parsedPort = std::stoi(portStr);
+						if(parsedPort > 0 && parsedPort <= 65535)
+						{
+							parsedTargetPort = static_cast<uint16>(parsedPort);
+						}
+					}
+					catch(...)
+					{
+					}
+				}
+			}
+
+			unsigned long resolved = (host == "255.255.255.255") ? INADDR_BROADCAST : inet_addr(host.c_str());
+			if(resolved == INADDR_NONE && host != "255.255.255.255")
+			{
+				hostent* he = gethostbyname(host.c_str());
+				if(he && he->h_addr_list && he->h_addr_list[0])
+				{
+					resolved = *reinterpret_cast<unsigned long*>(he->h_addr_list[0]);
+				}
+			}
+
+			if((resolved != INADDR_NONE || host == "255.255.255.255") && resolved != 0)
+			{
+				TARGET_ENDPOINT ep;
+				ep.addr = static_cast<uint32>(resolved);
+				ep.port = parsedTargetPort;
+				m_targets.push_back(ep);
+				CLog::GetInstance().Print(LOG_NAME, "Configured arcade USB Ethernet target '%s'.\r\n", entry.c_str());
+			}
+			else
+			{
+				CLog::GetInstance().Warn(LOG_NAME, "Failed to resolve arcade USB Ethernet target '%s'.\r\n", entry.c_str());
+			}
+		}
+
+		if(m_targets.empty())
+		{
+			CLog::GetInstance().Warn(LOG_NAME, "No valid arcade USB Ethernet targets resolved; falling back to localhost.\r\n");
+		}
+	}
+
 	m_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 	if(m_socket == INVALID_SOCKET)
 	{
 		CLog::GetInstance().Warn(LOG_NAME, "Failed to create UDP socket.\r\n");
 		return;
 	}
+
+	int broadcastEnable = 1;
+	setsockopt(m_socket, SOL_SOCKET, SO_BROADCAST, reinterpret_cast<const char*>(&broadcastEnable), sizeof(broadcastEnable));
 
 #ifdef _WIN32
 	u_long nonBlocking = 1;
@@ -572,20 +657,50 @@ void CEthernetUsbDevice::SendFrameToNetwork(const uint8* frameData, uint32 frame
 
 
 
-	for(uint16 offset = 0; offset < m_maxNodes; offset++)
+	if(m_targets.empty())
 	{
-		uint16 targetPort = m_basePort + offset;
-		if(targetPort == m_localPort)
+		for(uint16 offset = 0; offset < m_maxNodes; offset++)
 		{
-			continue;
-		}
+			uint16 targetPort = m_basePort + offset;
+			if(targetPort == m_localPort)
+			{
+				continue;
+			}
 
-		sockaddr_in destAddr = {};
-		destAddr.sin_family = AF_INET;
-		destAddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-		destAddr.sin_port = htons(targetPort);
-		sendto(m_socket, reinterpret_cast<const char*>(frameData), static_cast<int>(frameSize), 0,
-		       reinterpret_cast<const sockaddr*>(&destAddr), sizeof(destAddr));
+			sockaddr_in destAddr = {};
+			destAddr.sin_family = AF_INET;
+			destAddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+			destAddr.sin_port = htons(targetPort);
+			sendto(m_socket, reinterpret_cast<const char*>(frameData), static_cast<int>(frameSize), 0,
+			       reinterpret_cast<const sockaddr*>(&destAddr), sizeof(destAddr));
+		}
+		return;
+	}
+
+	for(const auto& target : m_targets)
+	{
+		if(target.port != 0)
+		{
+			sockaddr_in destAddr = {};
+			destAddr.sin_family = AF_INET;
+			destAddr.sin_addr.s_addr = target.addr;
+			destAddr.sin_port = htons(target.port);
+			sendto(m_socket, reinterpret_cast<const char*>(frameData), static_cast<int>(frameSize), 0,
+			       reinterpret_cast<const sockaddr*>(&destAddr), sizeof(destAddr));
+		}
+		else
+		{
+			for(uint16 offset = 0; offset < m_maxNodes; offset++)
+			{
+				uint16 targetPort = m_basePort + offset;
+				sockaddr_in destAddr = {};
+				destAddr.sin_family = AF_INET;
+				destAddr.sin_addr.s_addr = target.addr;
+				destAddr.sin_port = htons(targetPort);
+				sendto(m_socket, reinterpret_cast<const char*>(frameData), static_cast<int>(frameSize), 0,
+				       reinterpret_cast<const sockaddr*>(&destAddr), sizeof(destAddr));
+			}
+		}
 	}
 }
 
@@ -608,6 +723,12 @@ void CEthernetUsbDevice::PollSocket()
 			break;
 		}
 		if(received < 14)
+		{
+			continue;
+		}
+
+		// Drop self-echoed frames (e.g., from LAN subnet broadcast)
+		if(memcmp(recvBuf + 6, &m_regs[REG_ETH_ID0], 6) == 0)
 		{
 			continue;
 		}

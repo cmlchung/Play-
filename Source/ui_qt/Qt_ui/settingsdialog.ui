@@ -245,6 +245,20 @@
         <widget class="QLineEdit" name="lineEdit_arcadeIOServerPort"/>
        </item>
        <item>
+        <widget class="QLabel" name="label_arcadeEthernetTarget">
+         <property name="text">
+          <string>Arcade USB Ethernet Target IP/Host:</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLineEdit" name="lineEdit_arcadeEthernetTarget">
+         <property name="placeholderText">
+          <string>Default (127.0.0.1)</string>
+         </property>
+        </widget>
+       </item>
+       <item>
         <spacer name="verticalSpacer_2">
          <property name="orientation">
           <enum>Qt::Vertical</enum>

@@ -91,9 +91,16 @@ namespace Iop
 
 		std::deque<std::vector<uint8>> m_rxQueue;
 
+		struct TARGET_ENDPOINT
+		{
+			uint32 addr = 0;
+			uint16 port = 0;
+		};
+
 		SOCKET m_socket = INVALID_SOCKET;
 		uint16 m_localPort = 0;
 		uint16 m_basePort = 12460;
 		uint16 m_maxNodes = 4;
+		std::vector<TARGET_ENDPOINT> m_targets;
 	};
 }
