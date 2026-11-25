@@ -57,6 +57,13 @@ namespace Iop
 			uint32 arg = 0;
 		};
 
+		struct PENDING_CALLBACK
+		{
+			uint32 doneCb = 0;
+			uint32 size = 0;
+			uint32 arg = 0;
+		};
+
 		void InitSocket();
 		void CloseSocket();
 		void PollSocket();
@@ -77,8 +84,10 @@ namespace Iop
 		std::array<uint16, 32> m_phyRegs = {};
 
 		std::deque<PENDING_TRANSFER> m_rxTransfers;
+		std::deque<PENDING_CALLBACK> m_pendingCallbacks;
 		PENDING_TRANSFER m_intrTransfer;
 		int32 m_intrTicks = 0;
+		int32 m_rxTicks = 0;
 
 		std::deque<std::vector<uint8>> m_rxQueue;
 

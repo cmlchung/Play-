@@ -223,8 +223,6 @@ int32 CUsbd::OpenPipe(uint32 deviceId, uint32 descriptorPtr)
 
 int32 CUsbd::TransferPipe(uint32 pipeId, uint32 bufferPtr, uint32 size, uint32 optionPtr, uint32 doneCb, uint32 arg)
 {
-	CLog::GetInstance().Print(LOG_NAME, FUNCTION_TRANSFERPIPE "(pipeId = 0x%08X, bufferPtr = 0x%08X, length = %d, optionPtr = 0x%08X, doneCb = 0x%08X, arg = 0x%08X);\r\n",
-	                          pipeId, bufferPtr, size, optionPtr, doneCb, arg);
 
 	uint16 deviceId = (pipeId & 0xFFFF);
 	auto deviceIteratorPair = m_devices.find(deviceId);

@@ -225,7 +225,14 @@ void CEthernetUsbDevice::CountTicks(uint32 ticks)
 {
 	PollSocket();
 
-	while(!m_rxTransfers.empty() && !m_rxQueue.empty())
+	if(!m_pendingCallbacks.empty())
+	{
+		auto cb = m_pendingCallbacks.front();
+		m_pendingCallbacks.pop_front();
+		m_bios.TriggerCallback(cb.doneCb, 0, cb.size, cb.arg);
+	}
+
+	if(m_pendingCallbacks.empty() && !m_rxTransfers.empty() && !m_rxQueue.empty())
 	{
 		auto frame = std::move(m_rxQueue.front());
 		m_rxQueue.pop_front();
@@ -396,13 +403,6 @@ int32 CEthernetUsbDevice::TransferPipe(uint32 pipeId, uint32 bufferPtr, uint32 s
 		rx.doneCb = doneCb;
 		rx.arg = arg;
 		m_rxTransfers.push_back(rx);
-		PollSocket();
-		while(!m_rxTransfers.empty() && !m_rxQueue.empty())
-		{
-			auto frame = std::move(m_rxQueue.front());
-			m_rxQueue.pop_front();
-			CompleteRxTransfer(frame);
-		}
 		return 0;
 	}
 
@@ -421,7 +421,10 @@ int32 CEthernetUsbDevice::TransferPipe(uint32 pipeId, uint32 bufferPtr, uint32 s
 				SendFrameToNetwork(txBuf + 2, size - 2);
 			}
 		}
-		m_bios.TriggerCallback(doneCb, 0, size, arg);
+		if(doneCb != 0)
+		{
+			m_pendingCallbacks.push_back({doneCb, size, arg});
+		}
 		return 0;
 	}
 
@@ -448,8 +451,11 @@ void CEthernetUsbDevice::HandleControlTransfer(uint32 bufferPtr, uint32 size, ui
 		uint8* data = (bufferPtr != 0) ? (m_ram + bufferPtr) : nullptr;
 		uint16 regIndex = setup->index & 0xFF;
 		uint16 regCount = setup->length;
-		CLog::GetInstance().Print(LOG_NAME, "ControlTransfer: reqType=0x%02X req=0x%02X val=0x%04X idx=0x%04X len=%u\r\n",
-		                          setup->requestType, setup->request, setup->value, setup->index, setup->length);
+		if(setup->request != PEGASUS_REQ_GET_REGS)
+		{
+			CLog::GetInstance().Print(LOG_NAME, "ControlTransfer: reqType=0x%02X req=0x%02X val=0x%04X idx=0x%04X len=%u\r\n",
+			                          setup->requestType, setup->request, setup->value, setup->index, setup->length);
+		}
 
 		if((setup->requestType & 0x80) != 0)
 		{
@@ -520,7 +526,10 @@ void CEthernetUsbDevice::HandleControlTransfer(uint32 bufferPtr, uint32 size, ui
 		}
 	}
 
-	m_bios.TriggerCallback(doneCb, 0, size, arg);
+	if(doneCb != 0)
+	{
+		m_pendingCallbacks.push_back({doneCb, size, arg});
+	}
 }
 
 void CEthernetUsbDevice::UpdateEepromRead()
@@ -561,13 +570,7 @@ void CEthernetUsbDevice::SendFrameToNetwork(const uint8* frameData, uint32 frame
 		return;
 	}
 
-	char hexBuf[160] = {};
-	uint32 dumpLen = (frameSize < 42) ? frameSize : 42;
-	for(uint32 i = 0; i < dumpLen; i++)
-	{
-		snprintf(hexBuf + (i * 3), sizeof(hexBuf) - (i * 3), "%02X ", frameData[i]);
-	}
-	CLog::GetInstance().Print(LOG_NAME, "TX frame: %u bytes (port %u): %s\r\n", frameSize, m_localPort, hexBuf);
+
 
 	for(uint16 offset = 0; offset < m_maxNodes; offset++)
 	{
@@ -649,20 +652,21 @@ void CEthernetUsbDevice::CompleteRxTransfer(const std::vector<uint8>& frameData)
 	uint8* dst = m_ram + rx.bufferPtr;
 	if(headerSize > 0)
 	{
-		// ADM8513 (Pegasus II): first 2 bytes hold packet length (bits 0..11)
-		uint16 hdrLen = static_cast<uint16>(frameSize & 0x0FFF);
+		// ADM8513 (Pegasus II): first 2 bytes hold packet + CRC + status length (frameSize + 8)
+		uint16 hdrLen = static_cast<uint16>((frameSize + 8) & 0x0FFF);
 		dst[0] = static_cast<uint8>(hdrLen & 0xFF);
 		dst[1] = static_cast<uint8>((hdrLen >> 8) & 0xFF);
 	}
 	memcpy(dst + headerSize, frameData.data(), frameSize);
 	memset(dst + headerSize + frameSize, 0, 4); // 4-byte FCS/CRC placeholder
 
-	uint32 rxStatus = (frameSize + 8) & 0x0FFF;
-	dst[headerSize + frameSize + 4] = static_cast<uint8>(rxStatus & 0xFF);
-	dst[headerSize + frameSize + 5] = static_cast<uint8>((rxStatus >> 8) & 0xFF);
-	dst[headerSize + frameSize + 6] = static_cast<uint8>((rxStatus >> 16) & 0xFF);
-	dst[headerSize + frameSize + 7] = static_cast<uint8>((rxStatus >> 24) & 0xFF);
+	// ADM8513 4-byte RX status trailer: byte 0 = status/error flags (0 = OK), bytes 2..3 = length
+	uint16 rxLen = static_cast<uint16>((frameSize + 8) & 0x0FFF);
+	dst[headerSize + frameSize + 4] = 0x00;
+	dst[headerSize + frameSize + 5] = 0x00;
+	dst[headerSize + frameSize + 6] = static_cast<uint8>(rxLen & 0xFF);
+	dst[headerSize + frameSize + 7] = static_cast<uint8>((rxLen >> 8) & 0xFF);
 
-	CLog::GetInstance().Print(LOG_NAME, "RX frame: %u bytes (total=%u, buf=%u, queued=%zu, port %u)\r\n", frameSize, totalPacketSize, rx.size, m_rxTransfers.size(), m_localPort);
+
 	m_bios.TriggerCallback(rx.doneCb, 0, totalPacketSize, rx.arg);
 }
