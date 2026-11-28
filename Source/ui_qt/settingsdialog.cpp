@@ -88,6 +88,8 @@ void SettingsDialog::LoadPreferences()
 	ui->edit_arcadeRoms_dir->setText(PathToQString(CAppConfig::GetInstance().GetPreferencePath(PREF_PS2_ARCADEROMS_DIRECTORY)));
 	ui->checkBox_enableArcadeIOServer->setChecked(CAppConfig::GetInstance().GetPreferenceBoolean(PREF_PS2_ARCADE_IO_SERVER_ENABLED));
 	ui->lineEdit_arcadeIOServerPort->setText(QString::number(CAppConfig::GetInstance().GetPreferenceInteger(PREF_PS2_ARCADE_IO_SERVER_PORT)));
+	int arcadeEthernetPort = CAppConfig::GetInstance().GetPreferenceInteger(PREF_PS2_ARCADE_ETHERNET_PORT);
+	ui->lineEdit_arcadeEthernetPort->setText(arcadeEthernetPort > 0 ? QString::number(arcadeEthernetPort) : QString());
 	ui->lineEdit_arcadeEthernetTarget->setText(QString::fromUtf8(CAppConfig::GetInstance().GetPreferenceString(PREF_PS2_ARCADE_ETHERNET_TARGET)));
 
 	int factor = CAppConfig::GetInstance().GetPreferenceInteger(PREF_CGSH_OPENGL_RESOLUTION_FACTOR);
@@ -141,6 +143,11 @@ void SettingsDialog::on_checkBox_enableArcadeIOServer_clicked(bool checked)
 void SettingsDialog::on_lineEdit_arcadeIOServerPort_textChanged(const QString& value)
 {
 	CAppConfig::GetInstance().SetPreferenceInteger(PREF_PS2_ARCADE_IO_SERVER_PORT, value.toInt());
+}
+
+void SettingsDialog::on_lineEdit_arcadeEthernetPort_textChanged(const QString& value)
+{
+	CAppConfig::GetInstance().SetPreferenceInteger(PREF_PS2_ARCADE_ETHERNET_PORT, value.trimmed().toInt());
 }
 
 void SettingsDialog::on_lineEdit_arcadeEthernetTarget_textChanged(const QString& value)

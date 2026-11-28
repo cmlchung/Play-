@@ -38,6 +38,7 @@ private slots:
 	void on_button_browseArcadeRomsDir_clicked();
 	void on_checkBox_enableArcadeIOServer_clicked(bool checked);
 	void on_lineEdit_arcadeIOServerPort_textChanged(const QString& value);
+	void on_lineEdit_arcadeEthernetPort_textChanged(const QString& value);
 	void on_lineEdit_arcadeEthernetTarget_textChanged(const QString& value);
 
 	//Video Page

@@ -101,6 +101,7 @@ CPS2VM::CPS2VM()
 	CAppConfig::GetInstance().RegisterPreferenceBoolean(PREF_PS2_ARCADE_IO_SERVER_ENABLED, false);
 	CAppConfig::GetInstance().RegisterPreferenceInteger(PREF_PS2_ARCADE_IO_SERVER_PORT, 9876);
 	CAppConfig::GetInstance().RegisterPreferenceString(PREF_PS2_ARCADE_ETHERNET_TARGET, "");
+	CAppConfig::GetInstance().RegisterPreferenceInteger(PREF_PS2_ARCADE_ETHERNET_PORT, 0);
 }
 
 //////////////////////////////////////////////////

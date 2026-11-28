@@ -12,6 +12,7 @@
 #define PREF_PS2_ARCADE_IO_SERVER_ENABLED ("ps2.arcade.ioserver.enabled")
 #define PREF_PS2_ARCADE_IO_SERVER_PORT ("ps2.arcade.ioserver.port")
 #define PREF_PS2_ARCADE_ETHERNET_TARGET ("ps2.arcade.ethernet.target")
+#define PREF_PS2_ARCADE_ETHERNET_PORT ("ps2.arcade.ethernet.port")
 
 #define PREF_PS2_LIMIT_FRAMERATE ("ps2.limitframerate")
 

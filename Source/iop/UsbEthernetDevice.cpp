@@ -217,6 +217,24 @@ void CEthernetUsbDevice::InitSocket()
 	fcntl(m_socket, F_SETFL, flags | O_NONBLOCK);
 #endif
 
+	int32 configuredPort = CAppConfig::GetInstance().GetPreferenceInteger(PREF_PS2_ARCADE_ETHERNET_PORT);
+	if(configuredPort > 0 && configuredPort <= 65535)
+	{
+		sockaddr_in addr = {};
+		addr.sin_family = AF_INET;
+		addr.sin_addr.s_addr = htonl(INADDR_ANY);
+		addr.sin_port = htons(static_cast<uint16>(configuredPort));
+		if(bind(m_socket, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr)) == 0)
+		{
+			m_localPort = static_cast<uint16>(configuredPort);
+			CLog::GetInstance().Print(LOG_NAME, "Bound arcade USB Ethernet UDP bridge to configured port %u.\r\n", m_localPort);
+			return;
+		}
+		CLog::GetInstance().Warn(LOG_NAME, "Failed to bind arcade USB Ethernet UDP bridge to configured port %d.\r\n", configuredPort);
+		CloseSocket();
+		return;
+	}
+
 	for(uint16 offset = 0; offset < m_maxNodes; offset++)
 	{
 		sockaddr_in addr = {};

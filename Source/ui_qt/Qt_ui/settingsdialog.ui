@@ -245,6 +245,20 @@
         <widget class="QLineEdit" name="lineEdit_arcadeIOServerPort"/>
        </item>
        <item>
+        <widget class="QLabel" name="label_arcadeEthernetPort">
+         <property name="text">
+          <string>Arcade USB Ethernet Listen Port:</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLineEdit" name="lineEdit_arcadeEthernetPort">
+         <property name="placeholderText">
+          <string>Auto (12460-12463)</string>
+         </property>
+        </widget>
+       </item>
+       <item>
         <widget class="QLabel" name="label_arcadeEthernetTarget">
          <property name="text">
           <string>Arcade USB Ethernet Target IP/Host:</string>
